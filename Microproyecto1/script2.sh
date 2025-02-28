@@ -94,15 +94,104 @@ chown vagrant:vagrant consul_server.json
 echo "Iniciando agente de Consul..."
 sudo nohup consul agent -config-file=consul_server.json &>/var/log/consul.log &
 
-# Creación de archivo index.js
-echo "Creando archivo index.js..."
-mkdir app
+# Creación de archivos para aplicación web
+echo "Creando archivos para aplicación web..."
+mkdir -p app/views/layouts
 touch app/index.js
+touch app/views/layouts/main.handlebars
+touch app/views/index.handlebars
+
+# Escribir archivo main.handlebars
+echo "Escribiendo archivo main.handlebars..."
+sudo tee app/views/layouts/main.handlebars << EOF
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Web App Node.js</title>
+</head>
+<body>
+
+    {{{body}}}
+
+</body>
+</html>
+EOF
+
+# Escribir archivo index.handlebars
+echo "Escribiendo archivo index.handlebars..."
+sudo tee app/views/index.handlebars << EOF
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{title}}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .json-container {
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            max-width: 400px;
+            width: 100%;
+        }
+        .json-item {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .json-item:last-child {
+            border-bottom: none;
+        }
+        .json-key {
+            font-weight: bold;
+            color: #555;
+        }
+        .json-value {
+            color: #007bff;
+        }
+    </style>
+</head>
+<body>
+    <div class="json-container">
+        <div class="json-item">
+            <span class="json-key">Data:</span>
+            <span class="json-value">{{json.data}}</span>
+        </div>
+        <div class="json-item">
+            <span class="json-key">Data PID:</span>
+            <span class="json-value">{{json.data_pid}}</span>
+        </div>
+        <div class="json-item">
+            <span class="json-key">Data Service:</span>
+            <span class="json-value">{{json.data_service}}</span>
+        </div>
+        <div class="json-item">
+            <span class="json-key">Data Host:</span>
+            <span class="json-value">{{json.data_host}}</span>
+        </div>
+    </div>
+</body>
+</html>
+EOF
 
 # Escribir archivo index.js
 echo "Escribiendo archivo index.js..."
 sudo tee app/index.js << EOF
 const Consul = require('consul');
+const { engine } = require('express-handlebars');
 const express = require('express');
 
 const SERVICE_NAME = 'mymicroservice';
@@ -114,6 +203,12 @@ const PID = process.pid;
 
 /* Inicializacion del server */
 const app = express();
+
+// Configurar Handlebars como motor de plantillas
+app.engine('handlebars', engine()); // Registrar Handlebars como motor de plantillas
+app.set('view engine', 'handlebars'); // Establecer Handlebars como el motor de vistas
+app.set('views', '/home/vagrant/app/views'); // Carpeta donde estarán las vistas
+
 const consul = new Consul();
 
 app.get('/health', function (req, res) {
@@ -123,12 +218,16 @@ app.get('/health', function (req, res) {
 
 app.get('/', (req, res) => {
   console.log('GET /', Date.now());
-  res.json({
-    data: Math.floor(Math.random() * 89999999 + 10000000),
-    data_pid: PID,
-    data_service: SERVICE_ID,
-    data_host: HOST
-  });
+  res.render('index', {
+      title: 'Web App Node.js',
+      json: {
+        data: Math.floor(Math.random() * 89999999 + 10000000),
+        data_pid: PID,
+        data_service: SERVICE_ID,
+        data_host: HOST
+      }
+    }
+  )
 });
 
 app.listen(PORT, function () {
@@ -157,11 +256,15 @@ EOF
 
 # Instalación de paquetes
 echo "Instalación de paquetes para index.js..."
-(cd app && npm i express consul)
+(cd app && npm i express consul express-handlebars)
 
 # Creación de carpetas de logs
 echo "Creación de carpetas de logs..."
 mkdir logs
+
+# Se actualizan los permisos de la carpeta app
+echo "Actualizando los permisos de la carpeta app..."
+chown -R vagrant:vagrant app/
 
 # Inicialización de múltiples servicios
 echo "Inicialización de múltiples servicios..."
